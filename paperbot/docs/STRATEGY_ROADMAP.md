@@ -87,6 +87,30 @@ Required data before evaluation:
 
 Do not select wallets from a current leaderboard and call that a backtest. Record each observed source trade first, then evaluate copied entry price, latency, fillability, exit rule, and performance out of sample. Exclude wallets whose edge is primarily one exceptional trade or who routinely trade in books too thin to copy.
 
+### S2 selected as the successor to S0 (2026-08-17, design not started)
+
+Two things are settled; everything else is open.
+
+- **Edge thesis:** following wallets that are better informed. Not speed, not a
+  better model, not liquidity provision.
+- **Instrument:** Polymarket YES/NO conditional tokens. No leverage, no funding
+  rate, no liquidation — a buy is fully collateralised, and a position is exited
+  either by selling into the book or by holding to resolution.
+
+This is **position-holding**, which S0 was not. S0 bought a pair and merged it
+atomically, so it never held inventory. None of the machinery a position needs
+exists yet: there is no `quoteSell` (only `quoteBuy`), no inventory state, no
+mark-to-market, no exit rule, and fees are modelled on the buy side only. That
+gap is the build, and it is architectural.
+
+What carries over unchanged: paged market discovery, batched book fetching, the
+fee curve, level-walking, the replay harness, the promotion gates, and per-run
+corpus logging.
+
+Open questions before any code: which wallets and how they are selected without
+survivor bias, what the copied entry price actually is after latency, what the
+exit rule is, and how a rejected-because-unfillable copy is recorded.
+
 ## S3 — market making / LP (deferred)
 
 The LP repository is useful for quote-maintenance mechanics, not for directional alpha. This strategy needs queue position, fill probability, inventory skew, stale-quote detection, and actual maker-rebate records. It cannot be judged by midpoint PnL alone.
