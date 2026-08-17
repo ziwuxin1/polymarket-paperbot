@@ -3,17 +3,21 @@ import { join } from 'node:path';
 import { config } from './config.js';
 import { fetchActiveBinaryMarkets, fetchOrderBooks } from './market-data.js';
 import { PaperLedger } from './paper-ledger.js';
+import { hasReachedTarget } from './scan-control.js';
 import { scanPairedArbitrage } from './strategies/paired-arbitrage.js';
 
 const ledger = new PaperLedger(config.startingCashUsd);
-const dataDirectory = join(process.cwd(), 'data');
-const decisionLogPath = join(dataDirectory, 'paper-ledger.jsonl');
-const observationLogPath = join(dataDirectory, 'orderbook-observations.jsonl');
+const dataDirectory = join(process.cwd(), config.dataDirectory);
+// One log pair per run, so a corpus can always say which run produced a record.
+const runId = new Date().toISOString().replace(/[:.]/g, '-');
+const decisionLogPath = join(dataDirectory, `paper-ledger-${runId}.jsonl`);
+const observationLogPath = join(dataDirectory, `orderbook-observations-${runId}.jsonl`);
 
 async function persist(path, records) {
   if (records.length === 0) return;
   await mkdir(dataDirectory, { recursive: true });
-  await appendFile(path, `${records.map((record) => JSON.stringify(record)).join('\n')}\n`);
+  const lines = records.map((record) => JSON.stringify({ ...record, runId }));
+  await appendFile(path, `${lines.join('\n')}\n`);
 }
 
 function orderbookObservations(markets, books) {
@@ -41,6 +45,7 @@ async function scanOnce() {
     limit: config.marketFetchLimit,
     minLiquidityUsd: config.minLiquidityUsd,
     maxMarkets: config.maxMarketsPerScan,
+    maxPages: config.maxDiscoveryPages,
   });
   const tokenIds = markets.flatMap((market) => market.tokenIds);
   const books = await fetchOrderBooks(tokenIds);
@@ -51,15 +56,32 @@ async function scanOnce() {
   ]);
 
   const filled = results.filter((result) => result.status === 'filled');
+  const summary = ledger.summary();
   console.log(JSON.stringify({
     time: new Date().toISOString(), scannedMarkets: markets.length,
     accepted: filled.length, rejected: results.length - filled.length,
     acceptedTrades: filled.map((trade) => ({ market: trade.market, netPnl: trade.netPnl })),
-    summary: ledger.summary(), decisionLogPath, observationLogPath,
+    recordedDecisions: ledger.trades.length, targetDecisions: config.targetDecisions,
+    summary, decisionLogPath, observationLogPath,
   }, null, 2));
 }
 
 await scanOnce();
+
 if (config.loopSeconds > 0) {
-  setInterval(() => scanOnce().catch((error) => console.error(error)), config.loopSeconds * 1_000);
+  const timer = setInterval(async () => {
+    try {
+      await scanOnce();
+    } catch (error) {
+      console.error(error);
+      return;
+    }
+    if (hasReachedTarget({
+      recordedDecisions: ledger.trades.length,
+      targetDecisions: config.targetDecisions,
+    })) {
+      clearInterval(timer);
+      console.log(`Reached ${ledger.trades.length} decisions; stopping.`);
+    }
+  }, config.loopSeconds * 1_000);
 }

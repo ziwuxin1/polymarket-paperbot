@@ -38,3 +38,39 @@ test('complete-set trade rejects a gross edge erased by fees', () => {
   assert.equal(trade.status, 'rejected');
   assert.equal(trade.reason, 'net_edge_below_threshold');
 });
+
+test('rejected and filled records identify the market with the same flat fields', () => {
+  // A replay over the decision log must not have to branch on record status
+  // just to read which market a decision belonged to.
+  const market = { id: 'test', question: 'Test market', slug: 'test', feeRate: 0 };
+  const identity = (trade) => ({ marketId: trade.marketId, market: trade.market, slug: trade.slug });
+
+  const filled = new PaperLedger(100).tryMergeCompleteSet({
+    market,
+    yesBook: { asks: [{ price: 0.46, size: 10 }], hash: 'yes' },
+    noBook: { asks: [{ price: 0.47, size: 10 }], hash: 'no' },
+    shares: 10, assumedMergeCostUsd: 0, adverseSelectionBps: 0, minNetEdgePerShare: 0.01,
+  });
+  const rejected = new PaperLedger(100).tryMergeCompleteSet({
+    market,
+    yesBook: { asks: [{ price: 0.49, size: 10 }], hash: 'yes' },
+    noBook: { asks: [{ price: 0.52, size: 10 }], hash: 'no' },
+    shares: 10, assumedMergeCostUsd: 0, adverseSelectionBps: 0, minNetEdgePerShare: 0.01,
+  });
+
+  assert.equal(filled.status, 'filled');
+  assert.equal(rejected.status, 'rejected');
+  assert.deepEqual(identity(rejected), identity(filled));
+  assert.deepEqual(identity(filled), { marketId: 'test', market: 'Test market', slug: 'test' });
+});
+
+test('a rejected record still reports the orderbook hashes it was judged against', () => {
+  const ledger = new PaperLedger(100);
+  const rejected = ledger.tryMergeCompleteSet({
+    market: { id: 'test', question: 'Test market', slug: 'test', feeRate: 0 },
+    yesBook: { asks: [{ price: 0.49, size: 10 }], hash: 'yes-hash' },
+    noBook: { asks: [{ price: 0.52, size: 10 }], hash: 'no-hash' },
+    shares: 10, assumedMergeCostUsd: 0, adverseSelectionBps: 0, minNetEdgePerShare: 0.01,
+  });
+  assert.deepEqual(rejected.orderbookHashes, { yes: 'yes-hash', no: 'no-hash' });
+});
