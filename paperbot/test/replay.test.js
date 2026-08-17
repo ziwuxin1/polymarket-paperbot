@@ -1,6 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadObservations, observationToBooks, replaySweep, replayVariant, replayWarnings } from '../src/replay.js';
+import {
+  loadObservations, observationToBooks, replaySweep, replayVariant, replayWarnings, selectCorpusFiles,
+} from '../src/replay.js';
+
+test('corpus selection picks up every per-run observation log', () => {
+  assert.deepEqual(selectCorpusFiles([
+    'orderbook-observations-2026-08-17T06-53-03-010Z.jsonl',
+    'orderbook-observations-2026-08-17T17-02-11-580Z.jsonl',
+    'paper-ledger-2026-08-17T06-53-03-010Z.jsonl',
+    '.gitkeep',
+  ]), [
+    'orderbook-observations-2026-08-17T06-53-03-010Z.jsonl',
+    'orderbook-observations-2026-08-17T17-02-11-580Z.jsonl',
+  ]);
+});
+
+test('corpus selection still reads a pre-split flat log', () => {
+  assert.deepEqual(selectCorpusFiles(['orderbook-observations.jsonl']), ['orderbook-observations.jsonl']);
+});
+
+test('corpus selection refuses the quarantined pre-liquidity-fix data', () => {
+  // That data describes a universe with a median liquidity of ~$100. The
+  // roadmap forbids it entering a replay; enforce it here, not by filename luck.
+  assert.deepEqual(selectCorpusFiles([
+    'orderbook-observations.jsonl',
+    'orderbook-observations.pre-liquidity-fix.jsonl',
+  ]), ['orderbook-observations.jsonl']);
+});
 
 const baseConfig = {
   startingCashUsd: 1_000,

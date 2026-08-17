@@ -8,13 +8,16 @@ import { scanPairedArbitrage } from './strategies/paired-arbitrage.js';
 
 const ledger = new PaperLedger(config.startingCashUsd);
 const dataDirectory = join(process.cwd(), config.dataDirectory);
-const decisionLogPath = join(dataDirectory, 'paper-ledger.jsonl');
-const observationLogPath = join(dataDirectory, 'orderbook-observations.jsonl');
+// One log pair per run, so a corpus can always say which run produced a record.
+const runId = new Date().toISOString().replace(/[:.]/g, '-');
+const decisionLogPath = join(dataDirectory, `paper-ledger-${runId}.jsonl`);
+const observationLogPath = join(dataDirectory, `orderbook-observations-${runId}.jsonl`);
 
 async function persist(path, records) {
   if (records.length === 0) return;
   await mkdir(dataDirectory, { recursive: true });
-  await appendFile(path, `${records.map((record) => JSON.stringify(record)).join('\n')}\n`);
+  const lines = records.map((record) => JSON.stringify({ ...record, runId }));
+  await appendFile(path, `${lines.join('\n')}\n`);
 }
 
 function orderbookObservations(markets, books) {

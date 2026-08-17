@@ -43,6 +43,19 @@ function bestPairSum(observation) {
   return observation.yes.asks[0].price + observation.no.asks[0].price;
 }
 
+const OBSERVATION_LOG = /^orderbook-observations.*\.jsonl$/;
+
+// Observations captured before the liquidity-sort fix describe a universe with
+// a median liquidity of ~$100. They are kept for the record and must never be
+// replayed as if they were real.
+const QUARANTINED = /pre-liquidity-fix/;
+
+export function selectCorpusFiles(fileNames) {
+  return fileNames
+    .filter((name) => OBSERVATION_LOG.test(name) && !QUARANTINED.test(name))
+    .sort();
+}
+
 // Relaxed smoke-test settings survive in a shell session and silently turn the
 // next replay into nonsense. Say so in the output rather than reporting a gate.
 export function replayWarnings(config) {
