@@ -7,7 +7,6 @@ export function quoteBuy(asks, requestedShares) {
   let remaining = requestedShares;
   let filled = 0;
   let notional = 0;
-  let fee = 0;
 
   for (const level of asks) {
     if (remaining <= 0) break;
@@ -33,8 +32,10 @@ export class PaperLedger {
     const no = quoteBuy(noBook.asks, shares);
     const stamp = new Date().toISOString();
 
+    const hashes = { yes: yesBook.hash, no: noBook.hash };
+
     if (yes.filled !== shares || no.filled !== shares) {
-      return this.#recordRejected({ market, shares, stamp, reason: 'insufficient_top_of_book_depth', yes, no });
+      return this.#recordRejected({ market, hashes, shares, stamp, reason: 'insufficient_top_of_book_depth', yes, no });
     }
 
     const yesFee = estimateTakerFee(shares, yes.averagePrice, market.feeRate);
@@ -47,12 +48,12 @@ export class PaperLedger {
 
     if (netEdgePerShare < minNetEdgePerShare) {
       return this.#recordRejected({
-        market, shares, stamp, reason: 'net_edge_below_threshold', yes, no,
+        market, hashes, shares, stamp, reason: 'net_edge_below_threshold', yes, no,
         netEdgePerShare, totalCost,
       });
     }
     if (totalCost > this.cashUsd) {
-      return this.#recordRejected({ market, shares, stamp, reason: 'insufficient_paper_cash', yes, no, totalCost });
+      return this.#recordRejected({ market, hashes, shares, stamp, reason: 'insufficient_paper_cash', yes, no, totalCost });
     }
 
     this.cashUsd += netPnl;
@@ -63,7 +64,7 @@ export class PaperLedger {
       yesAveragePrice: yes.averagePrice, noAveragePrice: no.averagePrice,
       feeRate: market.feeRate, yesFee, noFee, assumedMergeCostUsd, adverseSelectionCost,
       totalCost, payout, netPnl, netEdgePerShare, cashAfter: this.cashUsd,
-      orderbookHashes: { yes: yesBook.hash, no: noBook.hash },
+      orderbookHashes: hashes,
     };
     this.trades.push(trade);
     return trade;
@@ -80,8 +81,14 @@ export class PaperLedger {
     };
   }
 
-  #recordRejected(payload) {
-    const trade = { type: 'paired_complete_set_arbitrage', status: 'rejected', ...payload };
+  // Rejected and filled records share one flat shape so a replay can read every
+  // decision without branching on status.
+  #recordRejected({ market, hashes, stamp, ...payload }) {
+    const trade = {
+      type: 'paired_complete_set_arbitrage', status: 'rejected', timestamp: stamp,
+      marketId: market.id, market: market.question, slug: market.slug,
+      feeRate: market.feeRate, orderbookHashes: hashes, ...payload,
+    };
     this.trades.push(trade);
     return trade;
   }

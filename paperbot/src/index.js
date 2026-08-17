@@ -6,7 +6,7 @@ import { PaperLedger } from './paper-ledger.js';
 import { scanPairedArbitrage } from './strategies/paired-arbitrage.js';
 
 const ledger = new PaperLedger(config.startingCashUsd);
-const dataDirectory = join(process.cwd(), 'data');
+const dataDirectory = join(process.cwd(), config.dataDirectory);
 const decisionLogPath = join(dataDirectory, 'paper-ledger.jsonl');
 const observationLogPath = join(dataDirectory, 'orderbook-observations.jsonl');
 

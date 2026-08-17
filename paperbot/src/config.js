@@ -4,6 +4,9 @@ const numberFromEnv = (name, fallback) => {
 };
 
 export const config = Object.freeze({
+  // Smoke tests must be able to write somewhere other than the replay corpus.
+  // cmd's `set VAR=x && ...` captures the space before `&&`, so trim it off.
+  dataDirectory: (process.env.PAPER_DATA_DIR || 'data').trim(),
   startingCashUsd: numberFromEnv('PAPER_STARTING_CASH_USD', 1_000),
   marketFetchLimit: numberFromEnv('PAPER_MARKET_FETCH_LIMIT', 100),
   maxMarketsPerScan: numberFromEnv('PAPER_MAX_MARKETS_PER_SCAN', 20),

@@ -29,7 +29,8 @@ function normalizeLevels(levels, direction) {
 export function normalizeMarket(raw) {
   const outcomes = parseList(raw.outcomes);
   const tokenIds = parseList(raw.clobTokenIds);
-  const liquidity = asFiniteNumber(raw.liquidity) ?? 0;
+  // Gamma exposes liquidity twice; only `liquidityNum` is a real number.
+  const liquidity = asFiniteNumber(raw.liquidityNum) ?? asFiniteNumber(raw.liquidity) ?? 0;
   const feeRate = raw.feesEnabled === true
     ? asFiniteNumber(raw.feeSchedule?.rate)
     : 0;
@@ -51,15 +52,24 @@ export function normalizeMarket(raw) {
   };
 }
 
-export async function fetchActiveBinaryMarkets({ limit, minLiquidityUsd, maxMarkets }) {
+// `order=liquidity` sorts Gamma's *string* liquidity column, so a market with
+// "9998" outranks one with "500000" and the page is dominated by dead books.
+// `liquidityNum` is the numeric column and is the only correct deepest-first sort.
+export function buildMarketDiscoveryParams({ limit, minLiquidityUsd }) {
   const params = new URLSearchParams({
     active: 'true',
     closed: 'false',
     enable_order_book: 'true',
-    order: 'liquidity',
+    order: 'liquidityNum',
     ascending: 'false',
     limit: String(limit),
   });
+  if (minLiquidityUsd > 0) params.set('liquidity_num_min', String(minLiquidityUsd));
+  return params;
+}
+
+export async function fetchActiveBinaryMarkets({ limit, minLiquidityUsd, maxMarkets }) {
+  const params = buildMarketDiscoveryParams({ limit, minLiquidityUsd });
   const response = await fetch(`${GAMMA_URL}/markets?${params}`);
   if (!response.ok) throw new Error(`Gamma market discovery failed: HTTP ${response.status}`);
 
