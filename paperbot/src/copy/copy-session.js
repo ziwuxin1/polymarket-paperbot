@@ -130,7 +130,8 @@ export function copyGateReport({
   const gate6 = {
     requirement: 'failure attributed to one of the three modes',
     attribution,
-    met: summary.realizedPnlUsd > 0 || attribution !== null,
+    met: summary.realizedPnlUsd > 0
+      || (attribution !== null && !String(attribution).startsWith('undetermined')),
   };
 
   return { gate1, gate2, gate3, gate4, gate5, gate6, exitRule: config.exitRule };
@@ -140,6 +141,11 @@ export function copyGateReport({
 // result. These three modes are independent and need different follow-ups.
 export function attributeFailure({ sourceWalletPnlUsd, copyRejectRate, entryEdgeUsd, realizedPnlUsd }) {
   if (realizedPnlUsd > 0) return null;
+  // null <= 0 is true in JS. Without this guard an unknown source PnL reports as
+  // a confident "no alpha", which is a claim the data does not support.
+  if (sourceWalletPnlUsd === null || sourceWalletPnlUsd === undefined) {
+    return 'undetermined_source_pnl_unknown';
+  }
   if (sourceWalletPnlUsd <= 0) return 'no_alpha';
   if (copyRejectRate >= 0.5) return 'not_copyable';
   if (entryEdgeUsd > 0) return 'exit_destroys_edge';

@@ -9,10 +9,25 @@ const asFiniteNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-async function getJson(url, fetchImpl) {
-  const response = await fetchImpl(url);
-  if (!response.ok) throw new Error(`Data API request failed: HTTP ${response.status} for ${url}`);
-  return response.json();
+const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+const DEFAULT_MAX_RETRIES = 5;
+const DEFAULT_RETRY_DELAY_MS = 500;
+
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+// Discovery walks hundreds of wallets, and the data API rate-limits. Dropping a
+// 429'd wallet biases the candidate pool by request order alone, so back off and
+// retry rather than silently losing candidates.
+async function getJson(url, fetchImpl, { maxRetries = DEFAULT_MAX_RETRIES, retryDelayMs = DEFAULT_RETRY_DELAY_MS } = {}) {
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetchImpl(url);
+    if (response.ok) return response.json();
+
+    if (!RETRYABLE.has(response.status) || attempt >= maxRetries) {
+      throw new Error(`Data API request failed: HTTP ${response.status} for ${url}`);
+    }
+    await sleep(retryDelayMs * 2 ** attempt);
+  }
 }
 
 // A backfilled trade and a live-observed one are not the same evidence. Backfill
@@ -47,14 +62,14 @@ export function normalizeSourceTrade(raw, { mode, observedAt = null }) {
 }
 
 export async function fetchWalletTrades(
-  { wallet, startSeconds, endSeconds, limit = 500, mode = 'backfill', observedAt = null },
+  { wallet, startSeconds, endSeconds, limit = 500, mode = 'backfill', observedAt = null, ...retry },
   fetchImpl = fetch,
 ) {
   const params = new URLSearchParams({ user: wallet, type: 'TRADE', limit: String(limit) });
   if (startSeconds !== undefined) params.set('start', String(startSeconds));
   if (endSeconds !== undefined) params.set('end', String(endSeconds));
 
-  const raw = await getJson(`${DATA_API_URL}/activity?${params}`, fetchImpl);
+  const raw = await getJson(`${DATA_API_URL}/activity?${params}`, fetchImpl, retry);
   return raw
     .map((trade) => normalizeSourceTrade(trade, { mode, observedAt }))
     .filter(Boolean);
@@ -62,9 +77,9 @@ export async function fetchWalletTrades(
 
 // The candidate pool must be "who traded", never "who won". Harvesting from a
 // market's trade tape gives everyone who was there, winners and losers alike.
-export async function fetchMarketTraders({ conditionId, limit = 500 }, fetchImpl = fetch) {
+export async function fetchMarketTraders({ conditionId, limit = 500, ...retry }, fetchImpl = fetch) {
   const params = new URLSearchParams({ market: conditionId, limit: String(limit) });
-  const raw = await getJson(`${DATA_API_URL}/trades?${params}`, fetchImpl);
+  const raw = await getJson(`${DATA_API_URL}/trades?${params}`, fetchImpl, retry);
 
   const wallets = new Set();
   for (const trade of raw) {
@@ -74,7 +89,7 @@ export async function fetchMarketTraders({ conditionId, limit = 500 }, fetchImpl
   return wallets;
 }
 
-export async function fetchWalletClosedPositions({ wallet, maxPages = 20 }, fetchImpl = fetch) {
+export async function fetchWalletClosedPositions({ wallet, maxPages = 20, ...retry }, fetchImpl = fetch) {
   const positions = [];
 
   for (let page = 0; page < maxPages; page += 1) {
@@ -85,7 +100,7 @@ export async function fetchWalletClosedPositions({ wallet, maxPages = 20 }, fetc
       sortBy: 'TIMESTAMP',
       sortDirection: 'DESC',
     });
-    const raw = await getJson(`${DATA_API_URL}/closed-positions?${params}`, fetchImpl);
+    const raw = await getJson(`${DATA_API_URL}/closed-positions?${params}`, fetchImpl, retry);
     positions.push(...raw);
     if (raw.length < CLOSED_POSITIONS_PAGE) break;
   }

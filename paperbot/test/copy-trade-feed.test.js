@@ -103,3 +103,44 @@ test('a failed data API call raises rather than returning an empty result', asyn
     /503/,
   );
 });
+
+test('a rate-limited request is retried rather than discarding the wallet', async () => {
+  // A live discovery run lost 233 of 250 candidate wallets to HTTP 429. Dropping
+  // them silently biases the candidate pool by nothing more than request order.
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return calls < 3
+      ? { ok: false, status: 429, json: async () => ({}) }
+      : jsonResponse([rawTrade]);
+  };
+
+  const events = await fetchWalletTrades(
+    { wallet: '0xabc', retryDelayMs: 0 }, fetchImpl,
+  );
+  assert.equal(calls, 3);
+  assert.equal(events.length, 1);
+});
+
+test('retries give up after a bounded number of attempts', async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return { ok: false, status: 429, json: async () => ({}) };
+  };
+  await assert.rejects(
+    () => fetchWalletTrades({ wallet: '0xabc', retryDelayMs: 0, maxRetries: 4 }, fetchImpl),
+    /429/,
+  );
+  assert.equal(calls, 5, 'one initial attempt plus four retries');
+});
+
+test('a non-retryable error is not retried', async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return { ok: false, status: 400, json: async () => ({}) };
+  };
+  await assert.rejects(() => fetchWalletTrades({ wallet: '0xabc', retryDelayMs: 0 }, fetchImpl));
+  assert.equal(calls, 1);
+});

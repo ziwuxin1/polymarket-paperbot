@@ -162,3 +162,19 @@ test('failure attribution separates no-alpha from not-copyable from bad-exits', 
     sourceWalletPnlUsd: 500, copyRejectRate: 0.1, entryEdgeUsd: 40, realizedPnlUsd: 30,
   }), null);
 });
+
+test('unknown source pnl is undetermined, never silently attributed to no_alpha', () => {
+  // null <= 0 is true in JS, so an unknown input would otherwise be reported as
+  // a confident "these wallets had no alpha" — a conclusion the data cannot support.
+  assert.equal(attributeFailure({
+    sourceWalletPnlUsd: null, copyRejectRate: 0.1, entryEdgeUsd: 40, realizedPnlUsd: -20,
+  }), 'undetermined_source_pnl_unknown');
+});
+
+test('an undetermined attribution does not satisfy gate 6', () => {
+  const report = copyGateReport({
+    copied: [], rejected: [], summary: { realizedPnlUsd: -5 }, config,
+    attribution: 'undetermined_source_pnl_unknown',
+  });
+  assert.equal(report.gate6.met, false);
+});
