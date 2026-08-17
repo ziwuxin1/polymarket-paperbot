@@ -7,6 +7,9 @@
   "scripts": {
     "scan": "node src/index.js",
     "replay": "node src/replay-cli.js",
+    "copy:discover": "node src/copy/discover-cli.js",
+    "copy:watch": "node src/copy/watch-cli.js",
+    "copy:report": "node src/copy/report-cli.js",
     "test": "node --test"
   },
   "engines": {
