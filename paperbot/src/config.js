@@ -17,4 +17,6 @@ export const config = Object.freeze({
   assumedMergeCostUsd: numberFromEnv('PAPER_ASSUMED_MERGE_COST_USD', 0.15),
   adverseSelectionBps: numberFromEnv('PAPER_ADVERSE_SELECTION_BPS', 5),
   loopSeconds: numberFromEnv('PAPER_LOOP_SECONDS', 0),
+  targetDecisions: numberFromEnv('PAPER_TARGET_DECISIONS', 0),
+  maxDiscoveryPages: numberFromEnv('PAPER_MAX_DISCOVERY_PAGES', 20),
 });
