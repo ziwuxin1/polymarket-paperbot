@@ -111,6 +111,43 @@ Open questions before any code: which wallets and how they are selected without
 survivor bias, what the copied entry price actually is after latency, what the
 exit rule is, and how a rejected-because-unfillable copy is recorded.
 
+### S2 harness built (2026-08-17)
+
+Implemented per `docs/superpowers/specs/2026-08-17-s2-copy-trading-design.md`.
+91 tests. Three commands: `copy:discover`, `copy:watch`, `copy:report`.
+
+Two bugs surfaced only by running against the live API, both of the same
+family as S0's liquidity-sort bug — silent wrongness that looks like a result:
+
+- A discovery run over 250 candidates evaluated 17. The rest returned HTTP 429
+  and were dropped, biasing the pool by request order. With retry and backoff
+  the same run evaluates 120 of 120.
+- Failure attribution reported `no_alpha` when source PnL was unknown, because
+  `null <= 0` is true in JavaScript. Unknown now returns
+  `undetermined_source_pnl_unknown` and does not satisfy gate 6.
+
+**First selection result.** 1,252 wallets harvested from 25 markets, 120
+evaluated against a 30-day-old cutoff, **3 selected (2.5%)**:
+
+| Rejection | Count |
+|---|---|
+| `not_profitable` | 69 |
+| `too_few_resolved_positions` | 19 |
+| `single_position_dependent` | 17 |
+| `positions_too_small_to_copy` | 12 |
+
+The `single_position_dependent` count is the one to watch: **14% of candidates
+look profitable but stop being profitable once their single best position is
+removed.** A selection process without that filter would have admitted all 17,
+and their apparent edge is one trade each. This is survivor bias caught in the
+act, and it is the strongest argument against ever selecting from a leaderboard.
+
+**Not yet answered.** No copy result exists. A 2.5% selection rate over 120
+candidates yields too few wallets to watch, and live-forward collection only
+records an observation when a watched wallet actually trades. Getting to gate 1
+(500 copies across 50 wallets and 200 markets) needs a far larger discovery pass
+first. Nothing about whether copying is profitable has been measured.
+
 ## S3 — market making / LP (deferred)
 
 The LP repository is useful for quote-maintenance mechanics, not for directional alpha. This strategy needs queue position, fill probability, inventory skew, stale-quote detection, and actual maker-rebate records. It cannot be judged by midpoint PnL alone.

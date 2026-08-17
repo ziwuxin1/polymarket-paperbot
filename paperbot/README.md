@@ -92,6 +92,39 @@ npm run scan
 
 `PAPER_LOOP_SECONDS=0` is the default. A loop is for data collection only; it does not make this executable trading software.
 
+## S2 — copy trading (position-holding)
+
+S0 is retired; see `docs/STRATEGY_ROADMAP.md`. S2 copies trades from wallets
+selected out of sample and measures whether following them survives latency,
+slippage, fees, and the exit. Design: `../docs/superpowers/specs/2026-08-17-s2-copy-trading-design.md`.
+
+Still read-only. No key, no credentials, no order path.
+
+```powershell
+npm run copy:discover   # harvest candidate wallets and select out of sample
+npm run copy:watch      # live-forward collection: source trades + the book at that moment
+npm run copy:report     # run the session across exit rules and latency variants, print gates
+```
+
+`copy:discover` harvests from market trade tape, never a leaderboard — the pool
+must be "who traded", not "who won". Selection uses only data before
+`COPY_SELECTION_CUTOFF` (default 30 days ago); everything after it is the
+evaluation window and must never influence selection.
+
+`copy:watch` snapshots the orderbook at the moment a watched wallet's trade is
+observed. That snapshot is the only honest basis for a copy price: Polymarket
+has no historical orderbook endpoint, so entries cannot be reconstructed after
+the fact. Set `COPY_TARGET_OBSERVATIONS` so a collection run ends by reaching
+its target rather than running until something kills it.
+
+Two rules the tests enforce, because they are how copy-trading backtests
+usually flatter themselves:
+
+- the copy price comes from walking the **follower's** book at
+  `source timestamp + latency`, never from the source's own fill price;
+- an open position is marked against the **bid** side, never the ask or the
+  midpoint.
+
 ## Deliberately out of scope for phase 1
 
 - smart-money copying (latency and survivor-bias need a separate event-time study);
