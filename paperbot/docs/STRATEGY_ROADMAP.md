@@ -159,3 +159,52 @@ The LP repository is useful for quote-maintenance mechanics, not for directional
 3. Count partial-fill and stale-book cases as losses or rejects; never silently convert them to a full fill.
 4. Split parameters by time: tune only on the first segment and report the final segment without retuning.
 5. Before any execution integration, run a shadow period that emits an order intent but has no signing, no credentials, and no network write path.
+
+### S1 harness built (2026-08-17)
+
+Implemented per `docs/superpowers/specs/2026-08-17-s1-forecast-design.md`.
+113 tests. Commands: `forecast:predict`, `forecast:score`.
+
+The design turns on two things the dexoryn-china reference implementation
+shows no awareness of:
+
+**Forward-only.** A model asked about an event that already resolved may simply
+know the answer, and no backtest can prove otherwise. Backtesting an LLM on
+resolved markets produces spectacular results that mean nothing. The harness
+therefore refuses to record a prediction against a closed, inactive, or
+past-end-date market — `assertForwardLooking` throws rather than warns.
+
+**The benchmark is the price, not a coin flip.** Skill is
+`brier(market) - brier(model)`. A model scoring 0.18 sounds good until the
+market's own implied probability scores 0.15 on the same questions. Every report
+carries three series: model, market, and a constant 0.5 floor.
+
+`market-baseline` is the control: it returns the market price unchanged, so it
+must never show skill or place a trade. First live run confirmed it — 400
+markets scanned, `wouldTrade: 0`.
+
+**First measurements.**
+
+| | 7-day window | 30-day window |
+|---|---|---|
+| Markets scanned | 400 | 400 |
+| Predictions recordable | **2** | **10** |
+| Rejected: resolves too far out | 384 | 376 |
+| Rejected by contamination guard | **10** | **10** |
+
+Two structural findings:
+
+1. **The deepest books are long-dated.** Only 2.5% of liquid markets resolve
+   within 30 days, 0.5% within 7. Forward-only evaluation is therefore slow on
+   exactly the markets that are liquid enough to trade. Reaching gate 1 (200
+   resolved predictions across 50 markets) is a weeks-to-months exercise, not
+   an afternoon. That is the price of an uncontaminated result.
+2. **10 of 400 markets were listed active with an end date already passed.**
+   Without the guard, a "forecast" on those would have been scored against an
+   event that had already happened — the exact contamination the design exists
+   to prevent, present in live data at 2.5%.
+
+**Not yet answered.** No skill measurement exists. No LLM has been run: the
+`llm` predictor is implemented and pluggable but needs `ANTHROPIC_API_KEY`, and
+running it before the baseline pipeline had proven itself would have been
+paying for numbers that could not yet be interpreted.

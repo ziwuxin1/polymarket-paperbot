@@ -10,7 +10,9 @@
     "copy:discover": "node src/copy/discover-cli.js",
     "copy:watch": "node src/copy/watch-cli.js",
     "copy:report": "node src/copy/report-cli.js",
-    "test": "node --test"
+    "test": "node --test",
+    "forecast:predict": "node src/forecast/predict-cli.js",
+    "forecast:score": "node src/forecast/score-cli.js"
   },
   "engines": {
     "node": ">=22"
